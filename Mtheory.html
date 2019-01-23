@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<!-- 
+   File   : Mtheory.html
+   Author : Piers C. Structures
+   Date   : Oct 2018
+   Notes  : Javascript familiarity excercise : provide an HTML5 page which allows
+            the user to select a root note and a scale (or chord) and then displays
+            a crude rendering of an instrument and highlights the notes that belong
+			   to the option in the 'key/scale/thing'. We have a canvas on which we will
+            draw stuff, a form which can be used to set the options.
+   Licence:  	
+
+   
+   
+   
+   
+   
+   
+-->
+
+
+<head><meta charset="utf-8"/></head>
+<html>
+<body>
+<canvas id="myCanvas" width="800" height="500" style="background-color:#888"></canvas>
+<form id="myForm">
+   Show:
+   <select id="selectOption" onchange="drawNeck(ctx,canvas)">
+	<option>Choose an Option</option>
+   </select>
+   Key:
+   <select id="keyOpts" onchange="drawNeck(ctx,canvas)">
+      <option>A</option>
+   </select>
+   Tuning:
+   <select id="String1" onchange="tuningChange(ctx,canvas)">
+      <option>E4</option>
+   </select>
+   <select id="String2" onchange="tuningChange(ctx,canvas)">
+      <option>A4</option>
+   </select>
+   <select id="String3" onchange="tuningChange(ctx,canvas)">
+      <option>D5</option>
+   </select>
+   <select id="String4" onchange="tuningChange(ctx,canvas)">
+      <option>G5</option>
+   </select>
+   <select id="String5" onchange="tuningChange(ctx,canvas)">
+      <option>B5</option>
+   </select>
+   <select id="String6" onchange="tuningChange(ctx,canvas)">
+      <option>E6</option>
+   </select>
+
+</form>
+
+<script>
+
+//
+var canvas = document.getElementById("myCanvas");
+var cvsleft = canvas.offsetLeft;
+var cvstop = canvas.offsetTop;
+var ctx = canvas.getContext("2d");
+var mclk = { x:-1, y:-1 };
+
+
+canvas.addEventListener('click', function(event) {
+   var x=event.pageX - cvsleft;
+   var y=event.pageY - cvstop;
+   mclk.x=x;
+   mclk.y=y;
+   drawNeck(ctx,canvas);   
+   mclk.x=-1;
+   mclk.y=-1;
+}, false );
+
+var Notes = ["C","C#/Db","D","D#/Eb","E","F","F#/Gb","G","G#/Ab","A","A#/Bb","B" ];
+var nFreq = [ 329.6, 349.2,370,392,415.3,440,466.2,493.9,523.3,554.4,587.3,622.3 ];
+
+var baseFreq = [ 16.35, 17.32, 18.35, 19.45, 20.60, 21.83, 23.12, 24.50, 25.96, 27.50, 29.14, 30.87 ];
+
+var rNotes = ["En","Fn","Fn#/Gnb","Gn","Gn#/Anb","An","An#/Bnb","Bn","Cn","Cn#/Dnb","Dn","Dn#/Enb"];
+
+// Populated on initialisation for 9 octaves
+var fullNotes = [];
+var fullFreq = [];
+
+// The open notes of our strings for normal E tuning expressed as intervals from E0@16.35Hz.
+var iSOff = [52,57,62,67,71,76];	// String Interval Offset
+
+
+var ScaleIntervals = {
+   "Chromatic":[0,1,2,3,4,5,6,7,8,9,10,11],
+   "Major Scale":[0,2,4,5,7,9,11],
+   "Major Pentatonic Scale":[0,2,4,7,9],
+   "Major Triad":[0,4,7],
+   "Major Sixth":[0,4,7,9],
+   "Major Seventh":[0,4,7,11],
+   "Major Ninth":[0,4,7,11,14],
+   "Major Elevnth":[0,4,7,11,2,5],
+   "Full Diminished":[0,3,6,9],
+   "Natual Minor":[0,2,3,5,7,8,10],
+   "Minor Pentatonic":[0,3,5,7,10],      
+   "Blues":[0,3,5,6,7,10],
+   "Blues Full Hybrid":[0,3,4,5,6,7,10,14]
+}
+   
+
+var slen = canvas.width*0.8;	// Proportion of width for display
+var fi = slen / 12;          //  fret proportion
+var fih = fi / 2;            //  Yea, gimmi half of that so I can stick the notes in
+
+// Access to form elements from the script
+var fOptions = document.getElementById("selectOption");
+
+var kOpts = document.getElementById("keyOpts");
+var StrOpts = [ document.getElementById("String1"), document.getElementById("String2"),
+                document.getElementById("String3"), document.getElementById("String4"),
+                document.getElementById("String5"), document.getElementById("String6")
+];
+              
+
+
+init();
+populateOptions(ctx);
+resizeCanvas();   
+drawNeck(ctx,canvas);
+
+
+
+function init() {
+   window.addEventListener('resize', resizeCanvas, false);
+   // Build our full arrays of note names and frequency for n octaves
+   for (n=0;n<9;n++) {
+      for (i=0;i<=11;i++) {
+         Note=Notes[i]+n.toString();
+         rFreq= baseFreq[i] * Math.pow(1.059463094359,n*12);
+         fullFreq.push(rFreq);
+         fullNotes.push(Note);        
+      }
+   }
+}
+
+
+function resizeCanvas() {
+
+   canvas.width=window.innerWidth;
+   
+   slen = canvas.width*0.8;	// Proportion of width for display
+   fi = slen / 12;          //  
+   fih = fi / 2;              
+   drawNeck(ctx,canvas);
+   
+}
+
+
+function populateOptions(ctx) {
+
+   fOptions.innerHTML="";
+
+   // Populate the Option, err options
+   for ( var x in ScaleIntervals ) {
+      var opt=x;
+	  var el=document.createElement("option");
+	  el.textContent=opt;
+	  el.value=opt;
+	  fOptions.appendChild(el);
+   }
+
+   // Key/root note selection
+   kOpts.innerHTML="";   
+   for (i=0;i<12;i++) {      
+	  var el=document.createElement("option");
+	  el.textContent=Notes[i];
+	  el.value=Notes[i];
+	  kOpts.appendChild(el);
+   }
+
+   // String Options, options, err - as it were
+   for (i=0;i<6;i++) {
+      var opt = StrOpts[i]
+      opt.innerHTML="";
+      for (n=0;n<fullNotes.length;n++) {
+         var el=document.createElement("option");
+         el.textContent=fullNotes[n];
+         el.value=fullNotes[n];
+         opt.appendChild(el);
+      }
+      defStr=["E4","A4","D5","G5","B5","E6"];
+      var tIdx = fullNotes.indexOf( defStr[i] );
+      opt.value = defStr[i];
+      
+   }
+
+ 
+}
+
+
+//function buildScale() {  
+//}
+
+
+function tuningChange(ctx,canvas) {
+
+   for (i=0;i<6;i++) {
+      var opt= StrOpts[i];
+      var sNote = opt.options[opt.selectedIndex].text;
+      var sNIdx = fullNotes.indexOf( sNote );
+      iSOff[i] = sNIdx;
+   }
+   
+   drawNeck( ctx, canvas );
+
+}
+
+
+function getNote(root,interval) {
+   var rIdx = Notes.indexOf(root);
+   var tIdx = rIdx+interval%12;
+   getNote=Notes[tIdx];
+}
+
+
+
+
+function isLit( note ) {
+
+   note = note.slice(0,note.length-1);
+
+   var nIdx = Notes.indexOf( note );					   // Index of the note   
+   var root=kOpts.options[kOpts.selectedIndex].text	   // our current root note
+   var rIdx=Notes.indexOf( root );						      // Index of the root
+   
+   // Get our absolutes, root note and the index in the fullNote/Freq tables
+   //var absRoot = root + OctOpts.options[OctOpts.selectedIndex].text; // Selected Octave
+   //var absNIdx = (iSOff[gstr]+gfret);
+   
+   opt=fOptions[fOptions.selectedIndex].text;            // What set?
+   var thisScale=ScaleIntervals[opt] ;                   // Which is?
+   
+   // Our intervals are always above the root note (for now)
+   var nItvl = -1;
+   if (nIdx<rIdx) {
+      nItvl= (nIdx + 12) - rIdx;
+   } else {
+      nItvl= nIdx-rIdx;
+   }
+   
+   var res=thisScale.indexOf( nItvl )
+      
+   var rv=false;
+   
+	if(  res >= 0 ) {
+	   rv=true;
+	}   
+
+	return rv;
+	   
+}
+
+
+function drawNeck(ctx,canvas) {
+
+   var root=kOpts.options[kOpts.selectedIndex].text	    // our current root note
+   var rIdx=Notes.indexOf( root );						       // Index of the root
+   var rFreq=nFreq[rIdx];   
+   
+   for(iStrNo=0;iStrNo<6;iStrNo++) {
+		drawString(ctx,canvas,iStrNo);
+	}	
+	
+    opt=fOptions[fOptions.selectedIndex].text;
+    var thisScale=ScaleIntervals[opt] ;
+
+}
+
+
+
+
+function soundNote( note,period ) {
+
+   var rIdx=fullNotes.indexOf( note );						// Index of the root
+   var rFreq=fullFreq[rIdx];
+
+   var context = new AudioContext();
+	var o = context.createOscillator();
+	var  g = context.createGain();
+
+
+	o.connect(g);
+	g.connect(context.destination);
+	o.frequency.value=rFreq;
+   g.gain.setValueAtTime(0,0);
+   g.gain.linearRampToValueAtTime(0.5,period/4);
+   g.gain.linearRampToValueAtTime(0.5,(period/4)*3);
+   g.gain.linearRampToValueAtTime(0,period);
+//   g.linearRampToValueAtTime(0,4);
+	o.start(0);
+	o.stop(period);
+   
+}
+
+
+
+
+
+
+
+function drawString(ctx,canvas,gstr) {
+
+   pcy = canvas.height*0.125+(canvas.height*0.125*gstr);
+
+   // The String
+   ctx.beginPath();
+   ctx.lineWidth=1;
+   ctx.moveTo(canvas.width*0.1+fi,pcy);
+   ctx.lineTo(canvas.width*0.9+fi+2,pcy);
+   ctx.stroke();
+   
+   // The Nut
+   ctx.beginPath();
+   ctx.lineWidth=4;
+   ctx.moveTo(canvas.width*0.1+fi,pcy-(canvas.height*0.0625));
+   ctx.lineTo(canvas.width*0.1+fi,pcy+(canvas.height*0.0625));
+   ctx.stroke();
+   
+   ctx.lineWidth=1;
+   
+   for (i=0; i<=12; i++ ) {
+        pcx = (canvas.width*0.1) + (i*fi) + fih;
+
+	    ctx.beginPath();
+		ctx.lineWidth=1;
+		ctx.moveTo(pcx+fih,pcy-(canvas.height*0.0625));
+		ctx.lineTo(pcx+fih,pcy+(canvas.height*0.0625));
+		ctx.stroke();
+
+		drawNote(ctx,canvas,gstr,i,pcx,pcy);
+   }
+
+   
+}
+
+
+function drawNote(ctx,canvas,gstr,gfret,ncx,ncy) {
+
+
+   
+   // Get our absolutes, root note and the index in the fullNote/Freq tables
+   var root=kOpts.options[kOpts.selectedIndex].text;	               // Selected Note
+   //var absRoot = root + OctOpts.options[OctOpts.selectedIndex].text; // Selected Octave
+
+   var absNIdx = (iSOff[gstr]+gfret);
+
+
+   // Radius of note circle
+	nRad = (fi * 0.75)/2;
+
+   // Check if Note is Clicked?
+   var isClicked = false;
+   if (mclk.x > -1) {
+      dx=ncx-mclk.x;
+      dy=ncy-mclk.y;
+      dd=Math.sqrt((dx*dx)+(dy*dy));     
+      if (dd < nRad) {
+         isClicked = true;
+      }
+   }
+   
+	sNote = fullNotes[ absNIdx ];
+	sNoteRel = fullNotes[ absNIdx ].slice(0,fullNotes[ absNIdx].length-1);
+   sOctave = fullNotes[ absNIdx ].slice(fullNotes[ absNIdx].length-1,fullNotes[ absNIdx].length);
+   	
+	ctx.beginPath();		
+	
+   var isRoot = (sNoteRel==root);
+       
+   ctx.lineWidth=isRoot?3:1;
+      
+	ctx.arc(ncx,ncy,nRad,2*Math.PI,false);
+	ctx.fillStyle = "white";
+	ctx.fill();		
+	ctx.stroke();	
+	
+    ctx.textBaseline="middle";
+    ctx.textAlign="center";
+    ctx.font = nRad + "px arial";
+	   
+	if (isRoot) {     
+       if( sNoteRel.length > 1) {
+          ctx.font = nRad/1.6 + "px arial";
+       } else {
+          ctx.font = nRad + "px arial";
+       }
+	} else {
+       ctx.font = nRad/2+ "px arial";
+	}
+	
+
+   if (isClicked) {
+		ctx.fillStyle='red';
+  	   soundNote( sNote, 1 );	   
+   }
+
+	if ( isLit(sNote) ) {
+		ctx.fillStyle='black';
+	} else {
+		ctx.fillStyle='white';
+	}
+	ctx.fillText( sNoteRel, ncx, ncy);	      
+   
+   
+}
+
+
+
+
+function drawKbdOctave( ctx, canvas, x,y,w,h, octave ) {
+
+   // area
+   ctx.fillRect(x,y,w,h);
+     
+   
+}
+
+
+
+</script>
+
+</body>
+</html>
